@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+  xmlns:context="http://www.springframework.org/schema/context"
+  xmlns:dellroad-stuff="http://dellroad-stuff.googlecode.com/schema/dellroad-stuff"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:p="http://www.springframework.org/schema/p"
+  xsi:schemaLocation="
+   http://dellroad-stuff.googlecode.com/schema/dellroad-stuff
+    http://dellroad-stuff.googlecode.com/svn/wiki/schemas/dellroad-stuff-1.0.xsd
+   http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+   http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!--
+        BoneCP pooled data source. This wraps an underlying MySQL data source.
+    -->
+    <bean id="boneCPDataSource" class="com.jolbox.bonecp.BoneCPDataSource" destroy-method="close">
+        <property name="driverClass" value="${example.db.driverClass}" />
+        <property name="jdbcUrl" value="${example.db.jdbcUrl}" />
+        <property name="username" value="${example.db.user}"/>
+        <property name="password" value="${example.db.pass}"/>
+        <property name="idleConnectionTestPeriodInMinutes" value="15"/>
+        <property name="idleMaxAgeInMinutes" value="240"/>
+        <property name="maxConnectionsPerPartition" value="15"/>
+        <property name="minConnectionsPerPartition" value="5"/>
+        <property name="partitionCount" value="3"/>
+        <property name="acquireIncrement" value="5"/>
+        <property name="statementsCacheSize" value="100"/>
+    </bean>
+
+    <!--
+        Applies one-time (idempotent) database initialization script.
+    -->
+    <bean id="databaseInitializer" class="com.example.orm.DatabaseInitializer">
+        <property name="dataSource">
+            <bean class="org.springframework.jdbc.datasource.DriverManagerDataSource"
+                p:driverClassName="${example.db.driverClass}"
+                p:url="jdbc:mysql://127.0.0.1:3306/?useUnicode=true&amp;logger=Slf4JLogger"
+                p:username="root"
+                p:password=""/>
+        </property>
+        <property name="setup">
+            <dellroad-stuff:sql>
+
+            -- Create the database
+            CREATE DATABASE IF NOT EXISTS `${example.db.name}` DEFAULT CHARACTER SET utf8 COLLATE utf8_bin;
+
+            -- Set up account and password
+            GRANT USAGE ON *.* TO '${example.db.user}'@'localhost' IDENTIFIED BY '${example.db.pass}'
+                WITH MAX_QUERIES_PER_HOUR 0 MAX_CONNECTIONS_PER_HOUR 0 MAX_UPDATES_PER_HOUR 0 MAX_USER_CONNECTIONS 0;
+            GRANT ALL PRIVILEGES ON `${example.db.name}`.* TO '${example.db.user}'@'localhost';
+            GRANT USAGE ON *.* TO '${example.db.user}'@'127.0.0.1' IDENTIFIED BY '${example.db.pass}'
+                WITH MAX_QUERIES_PER_HOUR 0 MAX_CONNECTIONS_PER_HOUR 0 MAX_UPDATES_PER_HOUR 0 MAX_USER_CONNECTIONS 0;
+            GRANT ALL PRIVILEGES ON `${example.db.name}`.* TO '${example.db.user}'@'127.0.0.1';
+
+            FLUSH PRIVILEGES;
+
+            </dellroad-stuff:sql>
+        </property>
+        <property name="functions">
+            <dellroad-stuff:sql>
+
+            -- Define our custom functions
+            DROP FUNCTION IF EXISTS `${example.db.name}`.REGMATCH;
+            CREATE FUNCTION `${example.db.name}`.REGMATCH (PATTERN TEXT, VALUE TEXT) RETURNS TINYINT(1)
+                COMMENT 'Applies the REGEXP operator in a functional syntax'
+                DETERMINISTIC
+                NO SQL
+            RETURN VALUE REGEXP PATTERN;
+
+            </dellroad-stuff:sql>
+        </property>
+    </bean>
+
+    <!--
+        Schema-updating data source that updates the DB schema as needed on first use.
+        This wraps the BoneCP pooled data source.
+    -->
+    <bean id="exampleDataSource" class="org.dellroad.stuff.schema.SchemaUpdatingDataSource"
+      depends-on="databaseInitializer" p:dataSource-ref="boneCPDataSource" p:schemaUpdater-ref="schemaUpdater"/>
+
+    <!--
+        Database schema updater. This tracks and applies schema updates.
+        Since no updates are explicitly listed, instances of SchemaUpdate
+        in this BeanFactory will be automatically detected and used.
+    -->
+    <bean id="schemaUpdater" class="org.dellroad.stuff.spring.SpringSQLSchemaUpdater">
+        <property name="databaseInitialization">
+            <dellroad-stuff:sql resource="classpath:schema.sql"/>
+        </property>
+        <property name="updateTableInitialization">
+            <dellroad-stuff:sql resource="classpath:org/dellroad/stuff/schema/updateTable-mysql.sql"/>
+        </property>
+    </bean>
+
+    <!-- Include schema updates to be auto-detected by SpringSQLSchemaUpdater -->
+    <import resource="classpath:schema-updates.xml"/>
+
+</beans>

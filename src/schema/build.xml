@@ -1,0 +1,201 @@
+<project name="example" default="none"
+  xmlns:dellroad="urn:org.dellroad.ant"
+  xmlns:liquibase="antlib:liquibase.integration.ant"
+  xmlns:antcontrib="urn:net.sf.antcontrib">
+
+<!-- ***************************************************************** -->
+<!-- **                      PROPERTIES                             ** -->
+<!-- ***************************************************************** -->
+
+    <!-- Set some properties -->
+    <dirname property="schema.dir" file="${ant.file}"/>
+    <property name="schema.file" value="${project.build.outputDirectory}/schema.sql"/>
+    <property name="original.file" value="${schema.dir}/original.sql"/>
+    <property name="expected.file" value="${schema.dir}/expected.sql"/>
+    <property name="updates.file" value="${basedir}/src/main/resources/schema-updates.xml"/>
+
+    <!-- Load ant-contrib tasks -->
+    <taskdef uri="urn:net.sf.antcontrib" resource="net/sf/antcontrib/antlib.xml"
+      classpath="${maven.dependency.ant-contrib.ant-contrib.jar.path}"/>
+
+    <!-- Load Liquibase tasks -->
+    <taskdef uri="antlib:liquibase.integration.ant" resource="liquibase/integration/ant/antlib.xml"
+      classpath="${maven.dependency.ant-contrib.ant-contrib.jar.path}"/>
+
+<!-- ***************************************************************** -->
+<!-- **                       MACRODEFS                             ** -->
+<!-- ***************************************************************** -->
+
+    <!--
+        Schema Update Verification
+
+        Requirements:
+
+            - You must have a local MySQL instance running
+            - You must have run the "setupSchemacheck.sql" script on it
+
+        How this works:
+
+          - The local MySQL database as a user "schemacheck" (same p/w) with all priviledges on schemacheck\_%
+          - LiquiBase *should* automatically detect any schema differences and if so the build will fail
+          - In any case, the SQL exports are diff'd as well; some differences might not be material but do a double check
+    -->
+    <macrodef uri="urn:org.dellroad.ant" name="schemacheck">
+        <attribute name="original" description="Starting schema file" default="${original.file}"/>
+        <attribute name="expected" description="Expected result schema file" default="${expected.file}"/>
+        <attribute name="updates" description="SQL updates file" default="${updates.file}"/>
+        <attribute name="dbhost" default="localhost" description="Database host"/>
+        <attribute name="dbuser" default="schemacheck" description="Database username"/>
+        <attribute name="dbpass" default="schemacheck" description="Database password"/>
+        <attribute name="workdir" description="Build/work directory" default="${project.build.directory}/schemacheck"/>
+        <sequential>
+
+            <!-- Reset -->
+            <delete dir="@{workdir}"/>
+            <mkdir dir="@{workdir}"/>
+
+            <!-- Extract database function setup script -->
+            <xslt style="${schema.dir}/extractInitScript.xsl" in="${basedir}/src/main/resources/dataSource.xml"
+              out="@{workdir}/functions.sql"/>
+            <copy file="@{workdir}/functions.sql" toFile="@{workdir}/functions1.sql">
+                <filterset begintoken="${" endtoken="}">
+                    <filter token="example.db.name" value="schemacheck_1"/>
+                </filterset>
+            </copy>
+            <copy file="@{workdir}/functions.sql" toFile="@{workdir}/functions2.sql">
+                <filterset begintoken="$${" endtoken="}">
+                    <filter token="example.db.name" value="schemacheck_2"/>
+                </filterset>
+            </copy>
+
+            <!-- Concatenate all updates into SQL script -->
+            <xslt style="${schema.dir}/extractSchemaUpdates.xsl" in="@{updates}" out="@{workdir}/updates.sql"/>
+
+            <!-- Create check databases -->
+            <sql driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://@{dbhost}/" classpathref="maven.plugin.classpath"
+              userid="@{dbuser}" password="@{dbpass}" print="false" showheaders="false" showtrailers="false">
+                <transaction>
+                    DROP DATABASE IF EXISTS `schemacheck_1`;
+                    DROP DATABASE IF EXISTS `schemacheck_2`;
+                    CREATE DATABASE `schemacheck_1` DEFAULT CHARACTER SET utf8 COLLATE utf8_bin;
+                    CREATE DATABASE `schemacheck_2` DEFAULT CHARACTER SET utf8 COLLATE utf8_bin;
+                </transaction>
+            </sql>
+
+            <!-- Apply function setup script to database #1 -->
+            <sql driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://@{dbhost}/schemacheck_1" classpathref="maven.plugin.classpath"
+              userid="@{dbuser}" password="@{dbpass}" print="false" showheaders="false" showtrailers="false">
+                <transaction src="@{workdir}/functions1.sql"/>
+            </sql>
+
+            <!-- Apply function setup script to database #2 -->
+            <sql driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://@{dbhost}/schemacheck_2" classpathref="maven.plugin.classpath"
+              userid="@{dbuser}" password="@{dbpass}" print="false" showheaders="false" showtrailers="false">
+                <transaction src="@{workdir}/functions2.sql"/>
+            </sql>
+
+            <!-- Apply original schema plus all updates to database #1 -->
+            <sql driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://@{dbhost}/schemacheck_1?autoGenerateTestcaseScript=true"
+              classpathref="maven.plugin.classpath" userid="@{dbuser}" password="@{dbpass}" print="false" showheaders="false"
+              showtrailers="false" autocommit="true">
+                <transaction src="@{original}"/>
+                <transaction src="@{workdir}/updates.sql"/>
+            </sql>
+
+            <!-- Apply up-to-date schema to database #2 -->
+            <sql driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://@{dbhost}/schemacheck_2" classpathref="maven.plugin.classpath"
+              userid="@{dbuser}" password="@{dbpass}" print="false" showheaders="false" showtrailers="false">
+                <transaction src="@{expected}"/>
+            </sql>
+
+            <!-- Dump schemas as flat files -->
+            <exec executable="mysqldump" output="@{workdir}/1.sql" logError="true" failonerror="true">
+                <arg line="-u @{dbuser} --password=@{dbpass} --host=@{dbhost} --no-data --skip-ssl schemacheck_1"/>
+            </exec>
+            <exec executable="mysqldump" output="@{workdir}/2.sql" logError="true" failonerror="true">
+                <arg line="-u @{dbuser} --password=@{dbpass} --host=@{dbhost} --no-data --skip-ssl schemacheck_2"/>
+            </exec>
+
+            <!-- Generate schema diff changelog -->
+            <liquibase:diffDatabaseToChangeLog classpathref="maven.plugin.classpath">
+                <liquibase:database
+                  driver="com.mysql.cj.jdbc.Driver"
+                  url="jdbc:mysql://@{dbhost}/schemacheck_1"
+                  user="@{dbuser}"
+                  password="@{dbpass}"/>
+                <liquibase:referenceDatabase
+                  driver="com.mysql.cj.jdbc.Driver"
+                  url="jdbc:mysql://@{dbhost}/schemacheck_2"
+                  user="@{dbuser}"
+                  password="@{dbpass}"/>
+                <liquibase:xml
+                  outputFile="@{workdir}/diffs.xml"
+                  encoding="UTF-8"/>
+            </liquibase:diffDatabaseToChangeLog>
+            <xslt style="${schema.dir}/extractSchemaDiffs.xsl" in="@{workdir}/diffs.xml"
+              out="@{workdir}/diffs.txt"/>
+            <exec executable="sed" logError="true" failonerror="true">
+                <arg value="-E"/>
+                <arg value="-i"/>
+                <arg value=""/>
+                <arg value="s/xml version=&quot;1.1&quot;/xml version=&quot;1.0&quot;/g"/><!-- fix stupid XML version 1.1 -->
+                <arg value="@{workdir}/diffs.txt"/>
+            </exec>
+
+            <!-- Drop databases -->
+            <sql driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://@{dbhost}/" classpathref="maven.plugin.classpath"
+              userid="@{dbuser}" password="@{dbpass}" print="false" showheaders="false" showtrailers="false">
+                DROP DATABASE `schemacheck_1`;
+                DROP DATABASE `schemacheck_2`;
+            </sql>
+
+            <!-- Show liquibase schema differences -->
+            <concat>
+                <fileset file="@{workdir}/diffs.txt"/>
+            </concat>
+            <condition property="schemacheck.match">
+                <filesmatch file1="@{workdir}/diffs.txt" file2="/dev/null"/>
+            </condition>
+
+            <!-- Show diff(1) of schema dumps -->
+            <exec executable="diff" logError="true" failonerror="false">
+                <arg value="-u"/>
+                <arg value="-I"/>
+                <arg value="^-- Host: @{dbhost}"/>
+                <arg value="-I"/>
+                <arg value="^-- Dump completed on"/>
+                <arg value="@{workdir}/1.sql"/>
+                <arg value="@{workdir}/2.sql"/>
+            </exec>
+
+            <!-- Fail the build if there were differences -->
+            <fail message="ERROR: schema mismatch (see above for details)" unless="schemacheck.match"/>
+        </sequential>
+    </macrodef>
+
+<!-- ***************************************************************** -->
+<!-- **                       TARGETS                               ** -->
+<!-- ***************************************************************** -->
+
+    <!--
+        Schema Update Verification:
+
+            - You must have a local MySQL instance running
+            - You must have run the "src/build/setupSchemacheck.sql" script on it
+
+        To initialize database permission:
+
+            GRANT USAGE ON *.* TO 'schemacheck'@'localhost' IDENTIFIED BY 'schemacheck'
+                WITH MAX_QUERIES_PER_HOUR 0 MAX_CONNECTIONS_PER_HOUR 0 MAX_UPDATES_PER_HOUR 0 MAX_USER_CONNECTIONS 0;
+            GRANT ALL PRIVILEGES ON `schemacheck_%`.* TO 'schemacheck'@'localhost';
+            GRANT USAGE ON *.* TO 'schemacheck'@'127.0.0.1' IDENTIFIED BY 'schemacheck'
+                WITH MAX_QUERIES_PER_HOUR 0 MAX_CONNECTIONS_PER_HOUR 0 MAX_UPDATES_PER_HOUR 0 MAX_USER_CONNECTIONS 0;
+            GRANT ALL PRIVILEGES ON `schemacheck_%`.* TO 'schemacheck'@'127.0.0.1';
+            FLUSH PRIVILEGES;
+
+    -->
+    <target name="verify-schema-updates">
+        <dellroad:schemacheck original="${original.file}" expected="${expected.file}" updates="${updates.file}"/>
+    </target>
+
+</project>

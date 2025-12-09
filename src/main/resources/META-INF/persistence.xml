@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<persistence version="2.1"
+  xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://java.sun.com/xml/ns/persistence http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd">
+    <persistence-unit name="example">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        <shared-cache-mode>ENABLE_SELECTIVE</shared-cache-mode>
+        <validation-mode>AUTO</validation-mode>
+        <properties>
+
+            <!-- Hibernate properties -->
+            <property name="hibernate.default_batch_fetch_size" value="16"/>
+            <property name="hibernate.default_entity_mode" value="pojo"/>
+            <property name="hibernate.dialect" value="org.hibernate.dialect.MariaDBDialect"/>
+            <property name="hibernate.max_fetch_depth" value="2"/>
+            <property name="hibernate.show_sql" value="false"/>
+            <property name="hibernate.format_sql" value="false"/>
+
+            <!-- Hibernate cache properties -->
+            <property name="hibernate.query.plan_cache_max_size" value="1024"/>
+            <property name="hibernate.cache.region.factory_class"
+              value="org.hibernate.cache.ehcache.SingletonEhCacheRegionFactory"/>
+            <property name="hibernate.cache.use_second_level_cache" value="false"/>
+            <property name="hibernate.cache.use_query_cache" value="false"/>
+            <property name="hibernate.cache.use_minimal_puts" value="false"/>
+            <property name="hibernate.cache.use_structured_entities" value="false"/>
+
+            <!-- Hibernate JDBC and connection properties -->
+            <property name="hibernate.jdbc.batch_size" value="15"/>
+            <property name="hibernate.jdbc.use_streams_for_binary" value="true"/>
+            <property name="hibernate.query.jpaql_strict_compliance" value="false"/>
+        </properties>
+    </persistence-unit>
+</persistence>

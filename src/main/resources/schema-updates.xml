@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:dellroad-stuff="http://dellroad-stuff.googlecode.com/schema/dellroad-stuff"
+  xsi:schemaLocation="
+   http://dellroad-stuff.googlecode.com/schema/dellroad-stuff
+     http://dellroad-stuff.googlecode.com/svn/wiki/schemas/dellroad-stuff-1.0.xsd
+   http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <!--
+        DATABASE SCHEMA UPDATES
+
+        You must ensure all predecessor constraints are explicitly listed. If update2 depends on
+        update1 then update2 should have depends-on="update1" to ensure updates will not be applied
+        out of order or incompletely merged into other code branches.
+
+        Once an update has been released to the world, it cannot ever be changed again unless you visit
+        every machine where the old update has applied and re-do it manually. Instead, add new updates.
+    -->
+
+    <!-- In this update we added the field Patient.middleName -->
+    <dellroad-stuff:sql-update id="addPatientMiddleName">
+        ALTER TABLE `Patient` ADD `middleName` VARCHAR(255) AFTER `lastName`;
+    </dellroad-stuff:sql-update>
+
+    <!-- In this update we added PidType.TEMP -->
+    <dellroad-stuff:sql-update id="addPidTypeTemporary">
+        ALTER TABLE `Pid` CHANGE `type` `type` enum ('CERNER','EPIC','MPI','TEMP') NOT NULL;
+    </dellroad-stuff:sql-update>
+
+</beans>

@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project
+  xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.dellroad</groupId>
+        <artifactId>dellroad-dependencies</artifactId>
+        <version>3.2.12.0</version>
+    </parent>
+    <artifactId>schema-diff-example</artifactId>
+    <name>Schema Differences Example</name>
+    <version>1.0.0</version>
+    <description>Example of generating and verifying MySQL schema from JPA model</description>
+    <properties>
+
+        <!-- Basic stuff -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jdk.version>17</jdk.version>
+
+        <!-- Dependency version overrides -->
+        <guava.version>33.4.8-jre</guava.version>
+        <hibernate-validator.version>8.0.3.Final</hibernate-validator.version>
+        <jackson-bom.version>2.19.1</jackson-bom.version>
+        <log4j2.version>2.23.1</log4j2.version>
+        <slf4j.version>2.0.17</slf4j.version>
+        <spring-framework.version>6.2.11</spring-framework.version>
+
+    </properties>
+
+    <dependencies>
+
+        <!-- Hbernate & Persistence -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jolbox</groupId>
+            <artifactId>bonecp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+        </dependency>
+
+        <!-- DellRoad Stuff -->
+        <dependency>
+            <groupId>org.dellroad</groupId>
+            <artifactId>dellroad-stuff-main</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.dellroad</groupId>
+            <artifactId>dellroad-stuff-spring</artifactId>
+        </dependency>
+
+        <!-- JSON -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Validation -->
+        <dependency>
+            <groupId>org.hibernate.validator</groupId>
+            <artifactId>hibernate-validator</artifactId>
+        </dependency>
+
+        <!-- Logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl-over-slf4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+        </dependency>
+
+        <!-- Misc utility -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+
+        <plugins>
+
+            <!-- Resources -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>${maven-resources-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>copy_normal_resources</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>resources</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Compile -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
+                <configuration>
+                    <source>${jdk.version}</source>
+                    <target>${jdk.version}</target>
+                    <release>${jdk.version}</release>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:all,-processing,-path</arg>
+                        <!--<arg>-Werror</arg>-->
+                        <arg>-AaddSuppressWarningsAnnotation=true</arg>
+                        <arg>-implicit:class</arg>
+                        <arg>-Xmaxerrs</arg>
+                        <arg>10000</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <annotationProcessorPath>
+                            <groupId>org.hibernate</groupId>
+                            <artifactId>hibernate-jpamodelgen</artifactId>
+                            <version>${hibernate.version}</version>
+                        </annotationProcessorPath>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- XML Validation -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>xml-maven-plugin</artifactId>
+                <version>${xml-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>xml_validate</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>validate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <catalogHandling>strict</catalogHandling>
+                    <validationSets>
+                        <validationSet>
+                            <dir>src</dir>
+                            <includes>**/*.xml</includes>
+                            <includes>**/*.xsl</includes>
+                        </validationSet>
+                    </validationSets>
+                </configuration>
+            </plugin>
+
+            <!-- Schema generation and verification -->
+            <plugin>
+                <groupId>org.dellroad</groupId>
+                <artifactId>hibernate-jpa-schemagen</artifactId>
+                <version>${hibernate-jpa-schemagen.version}</version>
+                <executions>
+                    <execution>
+                        <id>schema_verify</id>
+                        <configuration>
+                            <jpaUnit>example</jpaUnit>
+                            <outputFile>${project.build.outputDirectory}/schema.sql</outputFile>
+                            <verifyFile>${project.basedir}/src/schema/expected.sql</verifyFile>
+                            <fixups>
+                                <fixup>
+                                    <pattern>(?m)(^    | +$)</pattern>
+                                    <replacement/>
+                                </fixup>
+                                <!-- Set character set and collation to UTF-8 -->
+                                <fixup>
+                                    <pattern>InnoDB;</pattern>
+                                    <replacement>InnoDB default charset=utf8mb4 collate=utf8mb4_bin;</replacement>
+                                </fixup>
+                                <fixup>
+                                    <pattern>(?&lt;!\S)(bit|boolean)(?!\S)</pattern>
+                                    <replacement>tinyint(1)</replacement>
+                                </fixup>
+                                <fixup>
+                                    <pattern>datetime\(6\)</pattern>
+                                    <replacement>datetime</replacement>
+                                </fixup>
+                            </fixups>
+                        </configuration>
+                        <goals>
+                            <goal>export-jpa-schema</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Stuff done with ant tasks (schema update verification, JAR patching) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>${maven-antrun-plugin.version}</version>
+                <executions>
+
+                    <!-- Verify schema updates (only if ${maven.test.skip} != 'true') -->
+                    <execution>
+                        <id>verify_schema_updates</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <taskdef resource="net/sf/antcontrib/antlib.xml" classpathref="maven.plugin.classpath"/>
+                                <if>
+                                    <not>
+                                        <equals arg1="${maven.test.skip}" arg2="true"/>
+                                    </not>
+                                    <then>
+                                        <ant antfile="${project.basedir}/src/schema/build.xml"
+                                          target="verify-schema-updates" inheritAll="true" inheritRefs="true"/>
+                                    </then>
+                                </if>
+                            </target>
+                        </configuration>
+                    </execution>
+
+                </executions>
+
+                <!-- Dependencies -->
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.ant</groupId>
+                        <artifactId>ant</artifactId>
+                        <version>${ant.version}</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>ant-contrib</groupId>
+                        <artifactId>ant-contrib</artifactId>
+                        <version>${ant-contrib.version}</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.liquibase</groupId>
+                        <artifactId>liquibase-core</artifactId>
+                        <version>${liquibase.version}</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>com.mysql</groupId>
+                        <artifactId>mysql-connector-j</artifactId>
+                        <version>${mysql.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+
+            <!-- Checkstyle -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>${maven-checkstyle-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>checkstyle_verify</id>
+                        <phase>compile</phase>
+                        <configuration>
+                            <consoleOutput>true</consoleOutput>
+                            <failsOnError>true</failsOnError>
+                            <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                            <linkXRef>false</linkXRef>
+                            <includeResources>false</includeResources>
+                            <includeTestResources>false</includeTestResources>
+                            <sourceDirectories>
+                                <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+                                <sourceDirectory>${project.build.testSourceDirectory}</sourceDirectory>
+                            </sourceDirectories>
+                            <configLocation>${project.basedir}/src/checkstyle/checkstyle.xml</configLocation>
+                        </configuration>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
